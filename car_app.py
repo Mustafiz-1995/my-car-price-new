@@ -1,1 +1,266 @@
-{"nbformat":4,"nbformat_minor":0,"metadata":{"colab":{"provenance":[],"authorship_tag":"ABX9TyMtjQW2+zs8knMLM/KAo8ag"},"kernelspec":{"name":"python3","display_name":"Python 3"},"language_info":{"name":"python"}},"cells":[{"cell_type":"code","execution_count":null,"metadata":{"id":"CgDdpIlpVjMQ"},"outputs":[],"source":["import streamlit as st\n","import pandas as pd\n","import numpy as np\n","import joblib\n","import plotly.graph_objects as go\n","\n","# Page configuration\n","st.set_page_config(\n","    page_title=\"Car Price Prediction\",\n","    page_icon=\"\",\n","    layout=\"wide\"\n",")\n","\n","# Custom CSS\n","st.markdown(\"\"\"\n","    <style>\n","    .main {padding: 0rem 1rem;}\n","    h1 {color: #e74c3c; padding-bottom: 1rem;}\n","    </style>\n","    \"\"\", unsafe_allow_html=True)\n","\n","\n","# Load model\n","@st.cache_resource\n","def load_model():\n","    try:\n","        model = joblib.load('car_prediction_model.pkl')\n","        return model\n","    except FileNotFoundError:\n","        return None\n","\n","\n","# Header\n","st.title(\"Car Price Prediction System\")\n","st.markdown(\"### Get Instant Valuation for Your Used Car\")\n","\n","# Load model\n","model = load_model()\n","\n","if model is None:\n","    st.error(\"**Model file not found!**\")\n","    st.info(\"\"\"\n","    Please run the following command first:\n","    ```\n","    python car_price_prediction.py\n","    ```\n","    This will train and save the model.\n","    \"\"\")\n","    st.stop()\n","\n","# Sidebar inputs\n","st.sidebar.title(\"Car Details\")\n","\n","st.sidebar.subheader(\"Basic Information\")\n","year = st.sidebar.slider('Manufacturing Year', 2000, 2024, 2015)\n","present_price = st.sidebar.number_input('Current Ex-Showroom Price (Lakhs)', 0.0, 50.0, 5.0, 0.1)\n","kms_driven = st.sidebar.number_input('Kilometers Driven', 0, 500000, 50000, 1000)\n","\n","st.sidebar.subheader(\"Car Specifications\")\n","fuel_type = st.sidebar.selectbox('Fuel Type', ['Petrol', 'Diesel', 'CNG'])\n","seller_type = st.sidebar.selectbox('Seller Type', ['Dealer', 'Individual'])\n","transmission = st.sidebar.selectbox('Transmission', ['Manual', 'Automatic'])\n","owner = st.sidebar.selectbox('Number of Previous Owners', [0, 1, 2, 3])\n","\n","# Calculate car age\n","current_year = 2024\n","car_age = current_year - year\n","\n","# Predict button\n","st.sidebar.markdown(\"---\")\n","predict_btn = st.sidebar.button(\"Get Price Estimate\", type=\"primary\", use_container_width=True)\n","\n","# Main content\n","if predict_btn:\n","    # Encode categorical variables\n","    fuel_encoded = {'Petrol': 0, 'Diesel': 1, 'CNG': 2}[fuel_type]\n","    seller_encoded = {'Dealer': 0, 'Individual': 1}[seller_type]\n","    transmission_encoded = {'Manual': 0, 'Automatic': 1}[transmission]\n","\n","    # Prepare input\n","    input_data = pd.DataFrame({\n","        'Year': [year],\n","        'Present_Price': [present_price],\n","        'Kms_Driven': [kms_driven],\n","        'Fuel_Type': [fuel_encoded],\n","        'Seller_Type': [seller_encoded],\n","        'Transmission': [transmission_encoded],\n","        'Owner': [owner]\n","    })\n","\n","    # Make prediction\n","    predicted_price = model.predict(input_data)[0]\n","\n","    # Calculate depreciation\n","    depreciation = present_price - predicted_price\n","    depreciation_percent = (depreciation / present_price) * 100 if present_price > 0 else 0\n","\n","    # Display results\n","    st.markdown(\"---\")\n","    st.header(\"Price Estimation Results\")\n","\n","    # Main metrics\n","    col1, col2, col3 = st.columns(3)\n","\n","    with col1:\n","        st.metric(\n","            \"Estimated Selling Price\",\n","            f\"₹{predicted_price:.2f} Lakhs\",\n","            delta=None\n","        )\n","\n","    with col2:\n","        st.metric(\n","            \"Current Showroom Price\",\n","            f\"₹{present_price:.2f} Lakhs\",\n","            delta=None\n","        )\n","\n","    with col3:\n","        st.metric(\n","            \"Total Depreciation\",\n","            f\"₹{depreciation:.2f} Lakhs\",\n","            delta=f\"-{depreciation_percent:.1f}%\"\n","        )\n","\n","    # Gauge chart for price range\n","    st.markdown(\"---\")\n","    st.subheader(\"Price Analysis\")\n","\n","    col1, col2 = st.columns([2, 1])\n","\n","    with col1:\n","        # Price range estimate (±10%)\n","        lower_estimate = predicted_price * 0.9\n","        upper_estimate = predicted_price * 1.1\n","\n","        st.success(f\"\"\"\n","        **Expected Price Range:** ₹{lower_estimate:.2f}L - ₹{upper_estimate:.2f}L\n","\n","        This is the typical market range for similar vehicles.\n","        \"\"\")\n","\n","        # Price breakdown\n","        st.write(\"**Price Factors:**\")\n","\n","        factors = []\n","\n","        if car_age <= 2:\n","            factors.append(\"Very new car - minimal depreciation\")\n","        elif car_age <= 5:\n","            factors.append(\"Relatively new - good resale value\")\n","        elif car_age <= 10:\n","            factors.append(\"Moderate age - average market value\")\n","        else:\n","            factors.append(\"Older car - higher depreciation\")\n","\n","        if kms_driven < 30000:\n","            factors.append(\"Low mileage - adds value\")\n","        elif kms_driven < 80000:\n","            factors.append(\"Average mileage\")\n","        else:\n","            factors.append(\"High mileage - reduces value\")\n","\n","        if transmission == 'Automatic':\n","            factors.append(\"Automatic transmission - premium pricing\")\n","\n","        if fuel_type == 'Diesel':\n","            factors.append(\"Diesel - preferred for high usage\")\n","        elif fuel_type == 'Petrol':\n","            factors.append(\"Petrol - standard option\")\n","\n","        if seller_type == 'Dealer':\n","            factors.append(\"Dealer - may offer better warranty\")\n","\n","        for factor in factors:\n","            st.markdown(f\"- {factor}\")\n","\n","    with col2:\n","        # Gauge chart\n","        max_price = present_price * 1.2\n","\n","        fig = go.Figure(go.Indicator(\n","            mode=\"gauge+number\",\n","            value=predicted_price,\n","            title={'text': \"Estimated Price\"},\n","            number={'prefix': \"₹\", 'suffix': \"L\"},\n","            gauge={\n","                'axis': {'range': [None, max_price]},\n","                'bar': {'color': \"#e74c3c\"},\n","                'steps': [\n","                    {'range': [0, present_price * 0.3], 'color': \"lightgray\"},\n","                    {'range': [present_price * 0.3, present_price * 0.7], 'color': \"lightyellow\"},\n","                    {'range': [present_price * 0.7, max_price], 'color': \"lightgreen\"}\n","                ],\n","                'threshold': {\n","                    'line': {'color': \"blue\", 'width': 4},\n","                    'thickness': 0.75,\n","                    'value': present_price\n","                }\n","            }\n","        ))\n","        fig.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=20))\n","        st.plotly_chart(fig, use_container_width=True)\n","\n","    # Car details summary\n","    st.markdown(\"---\")\n","    st.subheader(\"Your Car Details\")\n","\n","    details_col1, details_col2 = st.columns(2)\n","\n","    with details_col1:\n","        st.write(f\"**Manufacturing Year:** {year}\")\n","        st.write(f\"**Car Age:** {car_age} years\")\n","        st.write(f\"**Kilometers Driven:** {kms_driven:,} km\")\n","        st.write(f\"**Fuel Type:** {fuel_type}\")\n","\n","    with details_col2:\n","        st.write(f\"**Transmission:** {transmission}\")\n","        st.write(f\"**Seller Type:** {seller_type}\")\n","        st.write(f\"**Previous Owners:** {owner}\")\n","        st.write(f\"**Current Showroom Price:** ₹{present_price} Lakhs\")\n","\n","    # Tips for selling\n","    st.markdown(\"---\")\n","    st.subheader(\"Tips to Get Better Price\")\n","\n","\n","else:\n","    # Initial page\n","    st.markdown(\"---\")\n","    st.info(\"Enter your car details in the sidebar and click **Get Price Estimate**\")\n","\n","    # Show example cars\n","    st.subheader(\"Example Valuations\")\n","\n","    col1, col2, col3 = st.columns(3)\n","\n","    with col1:\n","        st.write(\"**Recent Car**\")\n","        st.write(\"Year: 2020\")\n","        st.write(\"Price: ₹8.5L\")\n","        st.write(\"Kms: 20,000\")\n","        st.write(\"Est: ₹6.5-7.5L\")\n","\n","    with col2:\n","        st.write(\"**Mid-range Car**\")\n","        st.write(\"Year: 2015\")\n","        st.write(\"Price: ₹6.0L\")\n","        st.write(\"Kms: 50,000\")\n","        st.write(\"Est: ₹3.5-4.5L\")\n","\n","    with col3:\n","        st.write(\"**Older Car**\")\n","        st.write(\"Year: 2010\")\n","        st.write(\"Price: ₹5.0L\")\n","        st.write(\"Kms: 100,000\")\n","        st.write(\"Est: ₹1.5-2.5L\")\n","\n","    st.markdown(\"---\")\n","\n","    # Model info\n","    st.subheader(\"Model Information\")\n","    col1, col2, col3 = st.columns(3)\n","    col1.metric(\"Algorithm\", \"ML Regression\")\n","    col2.metric(\"Accuracy\", \"~85%\")\n","    col3.metric(\"Dataset\", \"300+ cars\")\n"]}]}
+import streamlit as st
+import pandas as pd
+import numpy as np
+import joblib
+import plotly.graph_objects as go
+
+# Page configuration
+st.set_page_config(
+    page_title="Car Price Prediction",
+    page_icon="",
+    layout="wide"
+)
+
+# Custom CSS
+st.markdown("""
+    <style>
+    .main {padding: 0rem 1rem;}
+    h1 {color: #e74c3c; padding-bottom: 1rem;}
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# Load model
+@st.cache_resource
+def load_model():
+    try:
+        model = joblib.load('car_prediction_model.pkl')
+        return model
+    except FileNotFoundError:
+        return None
+
+
+# Header
+st.title("Car Price Prediction System")
+st.markdown("### Get Instant Valuation for Your Used Car")
+
+# Load model
+model = load_model()
+
+if model is None:
+    st.error("**Model file not found!**")
+    st.info("""
+    Please run the following command first:
+    ```
+    python car_price_prediction.py
+    ```
+    This will train and save the model.
+    """)
+    st.stop()
+
+# Sidebar inputs
+st.sidebar.title("Car Details")
+
+st.sidebar.subheader("Basic Information")
+year = st.sidebar.slider('Manufacturing Year', 2000, 2024, 2015)
+present_price = st.sidebar.number_input('Current Ex-Showroom Price (Lakhs)', 0.0, 50.0, 5.0, 0.1)
+kms_driven = st.sidebar.number_input('Kilometers Driven', 0, 500000, 50000, 1000)
+
+st.sidebar.subheader("Car Specifications")
+fuel_type = st.sidebar.selectbox('Fuel Type', ['Petrol', 'Diesel', 'CNG'])
+seller_type = st.sidebar.selectbox('Seller Type', ['Dealer', 'Individual'])
+transmission = st.sidebar.selectbox('Transmission', ['Manual', 'Automatic'])
+owner = st.sidebar.selectbox('Number of Previous Owners', [0, 1, 2, 3])
+
+# Calculate car age
+current_year = 2024
+car_age = current_year - year
+
+# Predict button
+st.sidebar.markdown("---")
+predict_btn = st.sidebar.button("Get Price Estimate", type="primary", use_container_width=True)
+
+# Main content
+if predict_btn:
+    # Encode categorical variables
+    fuel_encoded = {'Petrol': 0, 'Diesel': 1, 'CNG': 2}[fuel_type]
+    seller_encoded = {'Dealer': 0, 'Individual': 1}[seller_type]
+    transmission_encoded = {'Manual': 0, 'Automatic': 1}[transmission]
+    
+    # Prepare input
+    input_data = pd.DataFrame({
+        'Year': [year],
+        'Present_Price': [present_price],
+        'Kms_Driven': [kms_driven],
+        'Fuel_Type': [fuel_encoded],
+        'Seller_Type': [seller_encoded],
+        'Transmission': [transmission_encoded],
+        'Owner': [owner]
+    })
+    
+    # Make prediction
+    predicted_price = model.predict(input_data)[0]
+    
+    # Calculate depreciation
+    depreciation = present_price - predicted_price
+    depreciation_percent = (depreciation / present_price) * 100 if present_price > 0 else 0
+    
+    # Display results
+    st.markdown("---")
+    st.header("Price Estimation Results")
+    
+    # Main metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(
+            "Estimated Selling Price",
+            f"₹{predicted_price:.2f} Lakhs",
+            delta=None
+        )
+    
+    with col2:
+        st.metric(
+            "Current Showroom Price",
+            f"₹{present_price:.2f} Lakhs",
+            delta=None
+        )
+    
+    with col3:
+        st.metric(
+            "Total Depreciation",
+            f"₹{depreciation:.2f} Lakhs",
+            delta=f"-{depreciation_percent:.1f}%"
+        )
+    
+    # Gauge chart for price range
+    st.markdown("---")
+    st.subheader("Price Analysis")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Price range estimate (±10%)
+        lower_estimate = predicted_price * 0.9
+        upper_estimate = predicted_price * 1.1
+        
+        st.success(f"""
+        **Expected Price Range:** ₹{lower_estimate:.2f}L - ₹{upper_estimate:.2f}L
+        
+        This is the typical market range for similar vehicles.
+        """)
+        
+        # Price breakdown
+        st.write("**Price Factors:**")
+        
+        factors = []
+        
+        if car_age <= 2:
+            factors.append("Very new car - minimal depreciation")
+        elif car_age <= 5:
+            factors.append("Relatively new - good resale value")
+        elif car_age <= 10:
+            factors.append("Moderate age - average market value")
+        else:
+            factors.append("Older car - higher depreciation")
+        
+        if kms_driven < 30000:
+            factors.append("Low mileage - adds value")
+        elif kms_driven < 80000:
+            factors.append("Average mileage")
+        else:
+            factors.append("High mileage - reduces value")
+        
+        if transmission == 'Automatic':
+            factors.append("Automatic transmission - premium pricing")
+        
+        if fuel_type == 'Diesel':
+            factors.append("Diesel - preferred for high usage")
+        elif fuel_type == 'Petrol':
+            factors.append("Petrol - standard option")
+        
+        if seller_type == 'Dealer':
+            factors.append("Dealer - may offer better warranty")
+        
+        for factor in factors:
+            st.markdown(f"- {factor}")
+    
+    with col2:
+        # Gauge chart
+        max_price = present_price * 1.2
+        
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=predicted_price,
+            title={'text': "Estimated Price"},
+            number={'prefix': "₹", 'suffix': "L"},
+            gauge={
+                'axis': {'range': [None, max_price]},
+                'bar': {'color': "#e74c3c"},
+                'steps': [
+                    {'range': [0, present_price * 0.3], 'color': "lightgray"},
+                    {'range': [present_price * 0.3, present_price * 0.7], 'color': "lightyellow"},
+                    {'range': [present_price * 0.7, max_price], 'color': "lightgreen"}
+                ],
+                'threshold': {
+                    'line': {'color': "blue", 'width': 4},
+                    'thickness': 0.75,
+                    'value': present_price
+                }
+            }
+        ))
+        fig.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=20))
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Car details summary
+    st.markdown("---")
+    st.subheader("Your Car Details")
+    
+    details_col1, details_col2 = st.columns(2)
+    
+    with details_col1:
+        st.write(f"**Manufacturing Year:** {year}")
+        st.write(f"**Car Age:** {car_age} years")
+        st.write(f"**Kilometers Driven:** {kms_driven:,} km")
+        st.write(f"**Fuel Type:** {fuel_type}")
+    
+    with details_col2:
+        st.write(f"**Transmission:** {transmission}")
+        st.write(f"**Seller Type:** {seller_type}")
+        st.write(f"**Previous Owners:** {owner}")
+        st.write(f"**Current Showroom Price:** ₹{present_price} Lakhs")
+    
+    # Tips for selling
+    st.markdown("---")
+    st.subheader("Tips to Get Better Price")
+    
+    
+else:
+    # Initial page
+    st.markdown("---")
+    st.info("Enter your car details in the sidebar and click **Get Price Estimate**")
+    
+    # Show example cars
+    st.subheader("Example Valuations")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.write("**Recent Car**")
+        st.write("Year: 2020")
+        st.write("Price: ₹8.5L")
+        st.write("Kms: 20,000")
+        st.write("Est: ₹6.5-7.5L")
+    
+    with col2:
+        st.write("**Mid-range Car**")
+        st.write("Year: 2015")
+        st.write("Price: ₹6.0L")
+        st.write("Kms: 50,000")
+        st.write("Est: ₹3.5-4.5L")
+    
+    with col3:
+        st.write("**Older Car**")
+        st.write("Year: 2010")
+        st.write("Price: ₹5.0L")
+        st.write("Kms: 100,000")
+        st.write("Est: ₹1.5-2.5L")
+    
+    st.markdown("---")
+    
+    # Model info
+    st.subheader("Model Information")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Algorithm", "ML Regression")
+    col2.metric("Accuracy", "~85%")
+    col3.metric("Dataset", "300+ cars")
